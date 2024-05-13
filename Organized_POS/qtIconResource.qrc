@@ -1,0 +1,36 @@
+<RCC>
+  <qresource prefix="QtIcons">
+    <file>QtIcons/Change_Price.png</file>
+    <file>QtIcons/Change_Price_Hovered.png</file>
+    <file>QtIcons/Decrease_Qty.png</file>
+    <file>QtIcons/Decrease_Qty_Hovered.png</file>
+    <file>QtIcons/Discount.png</file>
+    <file>QtIcons/Discount_Hovered.png</file>
+    <file>QtIcons/Hold_Sale.png</file>
+    <file>QtIcons/Hold_Sale_Hovered.png</file>
+    <file>QtIcons/Increase_Qty.png</file>
+    <file>QtIcons/Increase_Qty_Hovered.png</file>
+    <file>QtIcons/Inquire.png</file>
+    <file>QtIcons/Inquire_Hovered.png</file>
+    <file>QtIcons/Logout.png</file>
+    <file>QtIcons/Logout_Hovered.png</file>
+    <file>QtIcons/Ok_Button.png</file>
+    <file>QtIcons/Ok_Button_Hovered.png</file>
+    <file>QtIcons/Print_Receipt.png</file>
+    <file>QtIcons/Print_Receipt_Hovered.png</file>
+    <file>QtIcons/Remove_Item.png</file>
+    <file>QtIcons/Remove_Item_Hovered.png</file>
+    <file>QtIcons/Return_Product.png</file>
+    <file>QtIcons/Return_Product_Hovered.png</file>
+    <file>QtIcons/Search.png</file>
+    <file>QtIcons/Search_Hold.png</file>
+    <file>QtIcons/Search_Hold_Hovered.png</file>
+    <file>QtIcons/Search_Hovered.png</file>
+    <file>QtIcons/Tax_Excempt.png</file>
+    <file>QtIcons/Tax_Excempt_Hovered.png</file>
+    <file>QtIcons/Tender_Cash.png</file>
+    <file>QtIcons/Tender_Cash_Hovered.png</file>
+    <file>QtIcons/Void_Transaction.png</file>
+    <file>QtIcons/Void_Transaction_Hovered.png</file>
+  </qresource>
+</RCC>
