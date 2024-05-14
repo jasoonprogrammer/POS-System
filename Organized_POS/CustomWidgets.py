@@ -53,7 +53,40 @@ class HoverLabel(QtWidgets.QLabel):
             self.mount.addWidget(self)
 
 class CustomTableWidget(QtWidgets.QTableWidget):
-    def addQty(self):
+
+    def holdSale(self, **kwargs):
+        parent = kwargs['parent']
+        rows = self.rowCount()
+        if rows > 0:
+            buttonReply = QtWidgets.QMessageBox.question(parent, 'Hold this sale?', "Are you sure you want to hold this sale?", QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No)
+            if buttonReply == QtWidgets.QMessageBox.Yes:
+                c.execute("INSERT INTO hold (cashier_id) VALUES (1)")
+                hold_id = c.lastrowid
+                for row in range(rows):
+                    anon = lambda x: self.item(row, x).text()
+                    arr = {"barcode": anon(0), "price": anon(2), "qty": anon(3), "discount": anon(4)}
+                    c.execute("SELECT id FROM product WHERE barcode = %s", (anon(0),))
+                    product_id = c.fetchone()[0]
+                    c.execute("INSERT INTO hold_product (hold_id, product_id, price, quantity) VALUES (%s, %s, %s, %s)",
+                            (hold_id, product_id, anon(2), anon(3),))
+                    print(arr)
+                conn.commit()
+                self.setRowCount(0)
+                parent.paymentArea.setText("")
+                parent.setOutput()
+        else:
+            msg = QtWidgets.QMessageBox()
+            msg.setIcon(QtWidgets.QMessageBox.Warning)
+            msg.setWindowTitle("No items in the table")
+            msg.setText("Can't hold a table if it's empty.")
+            msg.exec_()
+            del msg
+
+    def addQty(self, **kwargs):
+        try:
+            parent = kwargs['parent']
+        except KeyError:
+            parent = None
         row = self.currentRow()
         if row >= 0:
             qty = self.item(row, 3).text()
@@ -69,8 +102,15 @@ class CustomTableWidget(QtWidgets.QTableWidget):
             total_item.setTextAlignment(align)
             self.setItem(row, 3, qty_item)
             self.setItem(row, 5, total_item)
+        
+        if kwargs['parent']:
+            parent.setOutput()
 
-    def subQty(self):
+    def subQty(self, **kwargs):
+        try:
+            parent = kwargs['parent']
+        except KeyError:
+            parent = None
         row = self.currentRow()
         if row >= 0:
             qty = self.item(row, 3).text()
@@ -87,6 +127,8 @@ class CustomTableWidget(QtWidgets.QTableWidget):
                 total_item.setTextAlignment(align)
                 self.setItem(row, 3, qty_item)
                 self.setItem(row, 5, total_item)
+        if parent:
+            parent.setOutput()
 
 
     def keyCapture(self, eve, parent):
@@ -109,7 +151,9 @@ class CustomTableWidget(QtWidgets.QTableWidget):
         if eve.key() == QtCore.Qt.Key_Escape:
             parent.barcodeArea.setFocus()
     def addItem(self, barcode, qty, parent):
-        
+        if parent.paymentArea.isEnabled() == False:
+            parent.paymentArea.setEnabled(True)
+            parent.paymentArea.setText("")
         c.execute("SELECT name, price FROM product WHERE barcode = %s", (barcode,))
         result = c.fetchone()
         if result:
@@ -148,13 +192,21 @@ class CustomTableWidget(QtWidgets.QTableWidget):
 
     def removeItem(self, parent):
         if self.rowCount() > 0:
-            buttonReply = QtWidgets.QMessageBox.question(parent, 'Confirm Void', "Void this product from list?", QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No)
-            if buttonReply == QtWidgets.QMessageBox.Yes:
-                row = self.currentRow()
-                self.removeRow(row)
-                self.clearFocus()
-                parent.barcodeArea.setFocus()
-            del buttonReply
+            if self.currentRow() < 0:
+                msg = QtWidgets.QMessageBox()
+                msg.setIcon(QtWidgets.QMessageBox.Information)
+                msg.setWindowTitle("No item selected")
+                msg.setText("Please select an item.")
+                msg.exec_()
+                del msg
+            else:
+                buttonReply = QtWidgets.QMessageBox.question(parent, 'Confirm Void', "Void this product from list?", QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No)
+                if buttonReply == QtWidgets.QMessageBox.Yes:
+                    row = self.currentRow()
+                    self.removeRow(row)
+                    self.clearFocus()
+                    parent.barcodeArea.setFocus()
+                del buttonReply
         else:
             msg = QtWidgets.QMessageBox()
             msg.setIcon(QtWidgets.QMessageBox.Warning)

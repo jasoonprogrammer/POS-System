@@ -14,6 +14,7 @@ import InquireWindow
 import CustomWidgets
 import SearchWindow
 import json
+import HoldSearchWindow
 conn = mysql.connector.connect(host = "localhost", user = "root", password = "", database = "test")
 
 c = conn.cursor()
@@ -49,14 +50,14 @@ class CustomTableWidget(QtWidgets.QTableWidget):
             if buttonReply == QtWidgets.QMessageBox.Yes:
                 c.execute("INSERT INTO hold (cashier_id) VALUES (1)")
                 hold_id = c.lastrowid
-                items = []
                 for row in range(rows):
                     anon = lambda x: self.item(row, x).text()
                     arr = {"barcode": anon(0), "price": anon(2), "qty": anon(3), "discount": anon(4)}
                     c.execute("SELECT id FROM product WHERE barcode = %s", (anon(0),))
                     product_id = c.fetchone()[0]
-                    c.execute("INSERT INTO hold_product (hold_id, product_id, price, quantity, customer_name) VALUES (%s, %s, %s, %s, %s)",
-                            (hold_id, product_id, anon(2), anon(3), "Anonymous",))
+                    c.execute("INSERT INTO hold_product (hold_id, product_id, price, quantity) VALUES (%s, %s, %s, %s)",
+                            (hold_id, product_id, anon(2), anon(3),))
+                    print(arr)
                 conn.commit()
                 self.setRowCount(0)
                 parent.paymentArea.setText("")
@@ -70,7 +71,10 @@ class CustomTableWidget(QtWidgets.QTableWidget):
             del msg
 
     def addQty(self, **kwargs):
-        parent = kwargs['parent']
+        try:
+            parent = kwargs['parent']
+        except KeyError:
+            parent = None
         row = self.currentRow()
         if row >= 0:
             qty = self.item(row, 3).text()
@@ -91,7 +95,10 @@ class CustomTableWidget(QtWidgets.QTableWidget):
             parent.setOutput()
 
     def subQty(self, **kwargs):
-        parent = kwargs['parent']
+        try:
+            parent = kwargs['parent']
+        except KeyError:
+            parent = None
         row = self.currentRow()
         if row >= 0:
             qty = self.item(row, 3).text()
@@ -132,7 +139,6 @@ class CustomTableWidget(QtWidgets.QTableWidget):
         if eve.key() == QtCore.Qt.Key_Escape:
             parent.barcodeArea.setFocus()
     def addItem(self, barcode, qty, parent):
-        
         c.execute("SELECT name, price FROM product WHERE barcode = %s", (barcode,))
         result = c.fetchone()
         if result:
@@ -245,8 +251,13 @@ class Ui_MainWindow(object):
             self.capturedKeys.clear()
         if QtCore.Qt.Key_F5 == eve.key():
             self.searchProduct()
+            self.capturedKeys.clear()
+
         if QtCore.Qt.Key_F6 == eve.key():
             InquireWindowDialog.show()
+
+        if QtCore.Qt.Key_F7 == eve.key():
+            self.holdSearch()
 
         if QtCore.Qt.Key_F8 == eve.key():
             self.productTable.holdSale(parent = self)
@@ -257,32 +268,39 @@ class Ui_MainWindow(object):
             self.capturedKeys.clear()
         
         if QtCore.Qt.Key_F4 == eve.key():
-            self.print_receipt()
+            self.printReceipt()
             self.capturedKeys.clear()
 
-        
-        if QtCore.Qt.Key_Return in self.capturedKeys and focused == "barcodeArea":
-            code = self.barcodeArea.text()
-            code = [x.strip() for x in code.split("*")]
-            if len(code) > 1:
-                qty = int(code[0])
-                barcode = code[1]
-            else:
-                qty = 1
-                barcode = code[0]
-            if isInt(barcode):
-                self.productTable.addItem(barcode, qty, self)
-                self.barcodeArea.setText("")
-            else:
-                msg = QtWidgets.QMessageBox()
-                msg.setIcon(QtWidgets.QMessageBox.Warning)
-                msg.setWindowTitle("Invalid barcode")
-                msg.setText("Barcode can only contain numbers")
-                msg.exec_()
-                del msg
-                self.barcodeArea.setText("")
-            
+        if QtCore.Qt.Key_Return in self.capturedKeys and focused == "paymentArea":
+            self.printReceipt()
             self.capturedKeys.clear()
+
+        if QtCore.Qt.Key_Return in self.capturedKeys and focused == "barcodeArea":
+            self.checkBarcode()
+            self.capturedKeys.clear()
+
+    def checkBarcode(self):
+        code = self.barcodeArea.text()
+        code = [x.strip() for x in code.split("*")]
+        if len(code) > 1:
+            qty = int(code[0])
+            barcode = code[1]
+        else:
+            qty = 1
+            barcode = code[0]
+        if isInt(barcode):
+            self.productTable.addItem(barcode, qty, self)
+            self.barcodeArea.setText("")
+        else:
+            msg = QtWidgets.QMessageBox()
+            msg.setIcon(QtWidgets.QMessageBox.Warning)
+            msg.setWindowTitle("Invalid barcode")
+            msg.setText("Barcode can only contain numbers")
+            msg.exec_()
+            del msg
+            self.barcodeArea.setText("")
+        
+        self.capturedKeys.clear()
 
     def inquire(self):
         InquireWindowDialog.show()
@@ -296,24 +314,78 @@ class Ui_MainWindow(object):
         except KeyError:
             pass
 
-    def finish_sale(self):
-        rows = self.productTable.rowCount()
-        
+    def holdSearch(self):
+        HoldSearchDialog.show()
 
-    def print_receipt(self, *arg):
+    def printReceipt(self, *arg):
         change = self.changeOuput.text()
         change = float(change)
-        if change > 0:
-            pass
+        if self.productTable.rowCount() <= 0:
+            msg = QtWidgets.QMessageBox()
+            msg.setIcon(QtWidgets.QMessageBox.Information)
+            msg.setWindowTitle("Empty table.")
+            msg.setText("Please add items to the table.")
+            msg.exec_()
         else:
+            if change >= 0:
+                self.capturedKeys.clear()
+                c.execute("INSERT INTO transaction (cashier_id) VALUES (1)")
+                transaction_id = c.lastrowid
+                rows = self.productTable.rowCount()
+                for r in range(rows):
+                    barcode = self.productTable.item(r, 0).text()
+                    name = self.productTable.item(r, 1).text()
+                    price = self.productTable.item(r, 2).text()
+                    qty = self.productTable.item(r, 3).text()
+                    discount = self.productTable.item(r, 4).text()
+                    c.execute("SELECT id FROM product WHERE barcode = %s", (barcode, ))
+                    product_id = c.fetchone()[0]
+                    c.execute("INSERT INTO sale (transaction_id, product_id, price, quantity) VALUES (%s, %s, %s, %s)", (transaction_id, product_id, price, qty))
+                msg = QtWidgets.QMessageBox()
+                msg.setIcon(QtWidgets.QMessageBox.Information)
+                msg.setWindowTitle("Printing Receipt")
+                msg.setText("Please count your change")
+                msg.exec_()
+                self.productTable.setRowCount(0)
+                self.paymentArea.setEnabled(False)
+                self.barcodeArea.setFocus()
+                # self.paymentArea.setText("0")
+                
+                del msg
+
+            else:
+                msg = QtWidgets.QMessageBox()
+                msg.setIcon(QtWidgets.QMessageBox.Warning)
+                msg.setWindowTitle("Insufficient Amount")
+                msg.setText("Please pay sufficient amount.")
+                msg.exec_()
+                del msg
+
+    def modifiedQtyChange(self): #this is a basic add
+        try:
+            last_char = self.barcodeArea.text()[-1]
+            if last_char == "+":
+                self.productTable.addQty(parent = self)
+                self.barcodeArea.setText(self.barcodeArea.text()[:-1])
+            elif last_char == "-":
+                self.productTable.subQty(parent = self)
+                self.barcodeArea.setText(self.barcodeArea.text()[:-1])
+        except:
+            pass
+    
+    def voidSale(self):
+        if self.productTable.rowCount() <= 0:
             msg = QtWidgets.QMessageBox()
             msg.setIcon(QtWidgets.QMessageBox.Warning)
-            msg.setWindowTitle("Insufficient Amount")
-            msg.setText("Please pay sufficient amount.")
+            msg.setWindowTitle("No items in the table")
+            msg.setText("Can't void a table if it's empty.")
             msg.exec_()
             del msg
-
-
+        else:
+            buttonReply = QtWidgets.QMessageBox.question(MainWindow, 'Void transaction?', "Are you sure you want to void this transaction?", QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No)
+            if buttonReply == QtWidgets.QMessageBox.Yes:
+                self.productTable.setRowCount(0)
+                self.setOutput()
 
     #end of the MainWindow button functions
 
@@ -336,7 +408,7 @@ class Ui_MainWindow(object):
         sizePolicy.setHeightForWidth(self.centralwidget.sizePolicy().hasHeightForWidth())
         self.centralwidget.setSizePolicy(sizePolicy)
         self.centralwidget.setObjectName("centralwidget")
-        self.productTable = CustomTableWidget(self.centralwidget)
+        self.productTable = CustomWidgets.CustomTableWidget(self.centralwidget)
         self.productTable.setGeometry(QtCore.QRect(10, 150, 980, 449))
         self.productTable.keyPressEvent = lambda x: self.productTable.keyCapture(x, self)
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
@@ -424,7 +496,6 @@ class Ui_MainWindow(object):
         self.paymentArea.textChanged.connect(self.setPayment)
         self.paymentArea.setSizePolicy(sizePolicy)
         self.paymentArea.setMinimumSize(QtCore.QSize(0, 30))
-        self.paymentArea.returnPressed.connect(self.print_receipt)
         font = QtGui.QFont()
         font.setPointSize(12)
         self.paymentArea.setFont(font)
@@ -497,6 +568,7 @@ class Ui_MainWindow(object):
         self.barcodeArea.setStyleSheet("padding-left: 5px;")
         self.barcodeArea.setText("")
         self.barcodeArea.setObjectName("barcodeArea")
+        self.barcodeArea.textChanged.connect(self.modifiedQtyChange)
         self.messageBox = QtWidgets.QLabel(self.centralwidget)
         self.messageBox.setGeometry(QtCore.QRect(992, 432, 280, 162))
         self.messageBox.setMinimumSize(QtCore.QSize(280, 162))
@@ -524,11 +596,13 @@ class Ui_MainWindow(object):
         self.inquire_button = CustomWidgets.HoverLabel(self.splitter, "QtIcons/Inquire.png", iconSize, 'inquire_button')
         self.inquire_button.mousePressEvent = lambda x: InquireWindowDialog.show()
         self.search_hold_button = CustomWidgets.HoverLabel(self.splitter, "QtIcons/Search_Hold.png", iconSize, "search_hold_button")
+        self.search_hold_button.mousePressEvent = lambda x: self.holdSearch()
         self.hold_button = CustomWidgets.HoverLabel(self.splitter, "QtIcons/Hold_Sale.png", iconSize, "hold_button")
         self.hold_button.mousePressEvent = lambda x: self.productTable.holdSale(parent = self)
         self.remove_button = CustomWidgets.HoverLabel(self.splitter, "QtIcons/Remove_Item.png", iconSize, "remove_button")
         self.remove_button.mousePressEvent = lambda x: self.productTable.removeItem(self)
         self.void_button = CustomWidgets.HoverLabel(self.splitter, "QtIcons/Void_Transaction.png", iconSize, "void_button")
+        self.void_button.mousePressEvent = lambda x: self.voidSale()
         self.returnProduct_button = CustomWidgets.HoverLabel(self.splitter, "QtIcons/Return_Product.png", iconSize, "returnProduct_button")
         self.change_button = CustomWidgets.HoverLabel(self.splitter, "QtIcons/Change_Price.png", iconSize, "change_button")
         self.add_button = CustomWidgets.HoverLabel(self.splitter, "QtIcons/Increase_Qty.png", iconSize, "add_button")
@@ -607,4 +681,8 @@ if __name__ == "__main__":
     SearchWindowDialog.setWindowModality(QtCore.Qt.ApplicationModal)
     SearchWindow_ui = SearchWindow.Ui_Form()
     SearchWindow_ui.setupUi(SearchWindowDialog, c, MainWindow_ui)
+    HoldSearchDialog = QtWidgets.QWidget()
+    HoldSearchDialog.setWindowModality(QtCore.Qt.ApplicationModal)
+    HoldSearchWindow_ui = HoldSearchWindow.Ui_Dialog()
+    HoldSearchWindow_ui.setupUi(HoldSearchDialog, c, MainWindow_ui)
     sys.exit(app.exec_())
