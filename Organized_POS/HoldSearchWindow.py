@@ -15,8 +15,28 @@ import mysql.connector
 
 
 class Ui_Dialog(object):
+    def populateTable(self):
+        self.c.execute("SELECT id, customer, timestamp FROM hold ORDER BY timestamp DESC")
+        self.all_hold = self.c.fetchall()
+        self.holdTable.setRowCount(0)
+        self.holdTable.setRowCount(len(self.all_hold))
+        for i, hold in enumerate(self.all_hold):
+            _id, customer, timestamp = hold
+            date = timestamp.strftime("%b %d, %Y")
+            time = timestamp.strftime("%I:%M:%S %p")
+            
+            hold_item = QtWidgets.QTableWidgetItem(str(_id))
+            self.holdTable.setItem(i, 0, hold_item)
+            customer_item = QtWidgets.QTableWidgetItem(str(customer))
+            self.holdTable.setItem(i, 1, customer_item)
+            date_item = QtWidgets.QTableWidgetItem(str(date))
+            self.holdTable.setItem(i, 2, date_item)
+            time_item = QtWidgets.QTableWidgetItem(str(time))
+            self.holdTable.setItem(i, 3, time_item)
     def setTable(self):
         query = self.customerName.text()
+        self.c.execute("SELECT id, customer, timestamp FROM hold ORDER BY timestamp DESC")
+        self.all_hold = self.c.fetchall()
         query_result = self.all_hold
         query_result = [x for x in query_result if query.lower() in x[1].lower()]
         self.holdTable.setRowCount(len(query_result))
@@ -50,8 +70,7 @@ class Ui_Dialog(object):
     def setupUi(self, Dialog, c, parent):
         self.parent = parent
         self.c = c
-        self.c.execute("SELECT id, customer, timestamp FROM hold ORDER BY timestamp DESC")
-        self.all_hold = self.c.fetchall()
+        self.all_hold = []
         self.Dialog = Dialog
         self.Dialog.setObjectName("Search Hold Sale")
         self.Dialog.setFixedSize(475, 310)
@@ -95,7 +114,7 @@ class Ui_Dialog(object):
         self.holdTable.setSelectionMode(QtWidgets.QTableView.SingleSelection)
         self.holdTable.setEditTriggers(QtWidgets.QTableWidget.NoEditTriggers)
         self.holdTable.setCurrentCell(-1, 0)
-        self.holdTable.doubleClicked.connect(self.setTable)
+        self.holdTable.doubleClicked.connect(self.recallItems)
 
         self.customerName = QtWidgets.QLineEdit(self.Dialog)
         self.customerName.setGeometry(QtCore.QRect(10, 10, 451, 31))
@@ -133,6 +152,7 @@ class Ui_Dialog(object):
         self.cancel.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
         self.horizontalLayout.addWidget(self.cancel)
         self.cancel.mousePressEvent = lambda x: self.Dialog.hide()
+        self.setTable()
 
         self.retranslateUi(self.Dialog)
         QtCore.QMetaObject.connectSlotsByName(self.Dialog)

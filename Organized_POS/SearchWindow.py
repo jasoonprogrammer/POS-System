@@ -11,25 +11,28 @@
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 class Ui_Form(object):
-    def selectProduct(self, eve):
+    def checkBind(self, eve):
         if eve.key() == QtCore.Qt.Key_Return:
-            curr_row = self.searchTable.currentRow()
-            if curr_row == -1:
-                msg = QtWidgets.QMessageBox()
-                msg.setIcon(QtWidgets.QMessageBox.Information)
-                msg.setWindowTitle("No item selected")
-                msg.setText("Please select a product to add to the list")
-                msg.exec_()
-                del msg
-            else:
-                buttonReply = QtWidgets.QMessageBox.question(self.Form, 'Hold this sale?', "Add this product?", QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.Yes)
-                if buttonReply:
-                    barcode = self.searchTable.item(curr_row, 0).text()
-                    self.parent.productTable.addItem(barcode, 1, self.parent)
-                    self.parent.productTable.setCurrentCell(0, 1)
-                    self.Form.hide()
-                    self.searchArea.setText("")
-                    self.searchArea.setFocus()
+            self.selectProduct()
+
+    def selectProduct(self):
+        curr_row = self.searchTable.currentRow()
+        if curr_row == -1:
+            msg = QtWidgets.QMessageBox()
+            msg.setIcon(QtWidgets.QMessageBox.Information)
+            msg.setWindowTitle("No item selected")
+            msg.setText("Please select a product to add to the list")
+            msg.exec_()
+            del msg
+        else:
+            buttonReply = QtWidgets.QMessageBox.question(self.Form, 'Hold this sale?', "Add this product?", QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.Yes)
+            if buttonReply == QtWidgets.QMessageBox.Yes:
+                barcode = self.searchTable.item(curr_row, 0).text()
+                self.parent.productTable.addItem(barcode, 1, self.parent)
+                self.parent.productTable.setCurrentCell(0, 1)
+                self.Form.hide()
+                self.searchArea.setText("")
+                self.searchArea.setFocus()
                     
     def searchProduct(self):
         val = self.searchArea.text()
@@ -110,10 +113,12 @@ class Ui_Form(object):
         self.searchTable.setColumnWidth(3, 90)
         self.searchTable.setEditTriggers(QtWidgets.QTableWidget.NoEditTriggers)
         self.verticalLayout.addWidget(self.searchTable)
+        self.searchTable.doubleClicked.connect(self.selectProduct)
         self.searchTable.setRowCount(0)
-        self.searchTable.keyPressEvent = self.selectProduct
+        self.searchTable.keyPressEvent = self.checkBind
         self.retranslateUi(self.Form)
         QtCore.QMetaObject.connectSlotsByName(self.Form)
+        self.searchProduct()
 
     def retranslateUi(self, Form):
         _translate = QtCore.QCoreApplication.translate

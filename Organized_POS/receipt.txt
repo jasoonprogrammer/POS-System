@@ -1,0 +1,24 @@
+                         CE Philippines                          
+           M.r. Lat St & President Jose P. Laurel Hwy            
+                   Batangas City, Philippines                    
+
+Transaction #: 0000000152                   Cashier: Jason Villa
+-----------------------------------------------------------------
+Qty Product Price Total
+  1 ANLENE 3X MOVEMAX PLAIN 30G              @ ₱19.30      ₱19.30
+  1 CREAM ALL PURPOSE FLOUR 400G             @ ₱60.60      ₱60.60
+  1 BIRCH TREE ADULT BOOST... SAVE P30      @ ₱238.35     ₱238.35
+  1 MAGNOLIA ALL PURPOSE FLOUR 800G          @ ₱85.85      ₱85.85
+  1 PUREFOODS CORNED BEEF 150G               @ ₱79.80      ₱79.80
+  1 ARGENTINA CORNED BEEF 150G               @ ₱33.25      ₱33.25
+  1 asd                                      @ ₱15.00      ₱15.00
+  1 asdasd                                   @ ₱21.00      ₱21.00
+-----------------------------------------------------------------
+    VATTABLE                                              ₱493.88
+    E-VAT (12%)                                            ₱59.27
+    TOTAL DISCOUNT                                          ₱0.00
+
+    TOTAL                                                 ₱553.15
+    PAYMENT                                               ₱600.00
+-----------------------------------------------------------------
+    CHANGE                                                 ₱46.85

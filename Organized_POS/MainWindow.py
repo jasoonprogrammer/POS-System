@@ -9,15 +9,9 @@
 
 
 from PyQt5 import QtCore, QtGui, QtWidgets
-import mysql.connector
-import InquireWindow
-import CustomWidgets
-import SearchWindow
-import json
-import HoldSearchWindow
-conn = mysql.connector.connect(host = "localhost", user = "root", password = "", database = "test")
-
-c = conn.cursor()
+import mysql.connector, os
+from PyQt5.QtPrintSupport import QPrinter, QPrintDialog, QPrintPreviewDialog
+from dotenv import load_dotenv
 
 
 def isFloat(value) -> bool:
@@ -40,176 +34,114 @@ ARROW_DOWN = 16777237
 NUMPAD_PLUS = 43
 NUMPAD_MINUS = 45
 
-class CustomTableWidget(QtWidgets.QTableWidget):
-
-    def holdSale(self, **kwargs):
-        parent = kwargs['parent']
-        rows = self.rowCount()
-        if rows > 0:
-            buttonReply = QtWidgets.QMessageBox.question(MainWindow, 'Hold this sale?', "Are you sure you want to hold this sale?", QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No)
-            if buttonReply == QtWidgets.QMessageBox.Yes:
-                c.execute("INSERT INTO hold (cashier_id) VALUES (1)")
-                hold_id = c.lastrowid
-                for row in range(rows):
-                    anon = lambda x: self.item(row, x).text()
-                    arr = {"barcode": anon(0), "price": anon(2), "qty": anon(3), "discount": anon(4)}
-                    c.execute("SELECT id FROM product WHERE barcode = %s", (anon(0),))
-                    product_id = c.fetchone()[0]
-                    c.execute("INSERT INTO hold_product (hold_id, product_id, price, quantity) VALUES (%s, %s, %s, %s)",
-                            (hold_id, product_id, anon(2), anon(3),))
-                    print(arr)
-                conn.commit()
-                self.setRowCount(0)
-                parent.paymentArea.setText("")
-                parent.setOutput()
-        else:
-            msg = QtWidgets.QMessageBox()
-            msg.setIcon(QtWidgets.QMessageBox.Warning)
-            msg.setWindowTitle("No items in the table")
-            msg.setText("Can't hold a table if it's empty.")
-            msg.exec_()
-            del msg
-
-    def addQty(self, **kwargs):
-        try:
-            parent = kwargs['parent']
-        except KeyError:
-            parent = None
-        row = self.currentRow()
-        if row >= 0:
-            qty = self.item(row, 3).text()
-            qty = int(qty)
-            qty += 1
-            price = self.item(row, 2).text()
-            total = float(price) * qty
-            total = "{:,.2f}".format(total)
-            align = QtCore.Qt.AlignRight|QtCore.Qt.AlignVCenter
-            qty_item = QtWidgets.QTableWidgetItem(str(qty))
-            qty_item.setTextAlignment(align)
-            total_item = QtWidgets.QTableWidgetItem(str(total))
-            total_item.setTextAlignment(align)
-            self.setItem(row, 3, qty_item)
-            self.setItem(row, 5, total_item)
-        
-        if kwargs['parent']:
-            parent.setOutput()
-
-    def subQty(self, **kwargs):
-        try:
-            parent = kwargs['parent']
-        except KeyError:
-            parent = None
-        row = self.currentRow()
-        if row >= 0:
-            qty = self.item(row, 3).text()
-            qty = int(qty)
-            if qty > 1:
-                qty -= 1
-                price = self.item(row, 2).text()
-                total = float(price) * qty
-                total = "{:,.2f}".format(total)
-                align = QtCore.Qt.AlignRight|QtCore.Qt.AlignVCenter
-                qty_item = QtWidgets.QTableWidgetItem(str(qty))
-                qty_item.setTextAlignment(align)
-                total_item = QtWidgets.QTableWidgetItem(str(total))
-                total_item.setTextAlignment(align)
-                self.setItem(row, 3, qty_item)
-                self.setItem(row, 5, total_item)
-        if parent:
-            parent.setOutput()
-
-
-    def keyCapture(self, eve, parent):
-        if eve.key() == NUMPAD_PLUS:
-            self.addQty()
-        elif eve.key() == NUMPAD_MINUS:
-            self.subQty()
-        if eve.key() == ARROW_UP:
-            currentRow = self.currentRow()
-            if self.currentRow() < 0:
-                self.setCurrentCell(self.rowCount() - 1, 1)
-            else:
-                self.setCurrentCell(self.currentRow() - 1, 1)
-            parent.capturedKeys.clear()
-        if eve.key() == ARROW_DOWN:
-            row = self.currentRow()
-            self.setCurrentCell(row + 1, 1)
-            parent.capturedKeys.clear()
-        parent.setOutput()
-        if eve.key() == QtCore.Qt.Key_Escape:
-            parent.barcodeArea.setFocus()
-    def addItem(self, barcode, qty, parent):
-        c.execute("SELECT name, price FROM product WHERE barcode = %s", (barcode,))
-        result = c.fetchone()
-        if result:
-            row = self.rowCount()
-            self.setRowCount(row + 1)
-            total = qty * result[1]
-            arr = [barcode, result[0], "{:,.2f}".format(result[1]), qty, 0, "{:,.2f}".format(total)]
-            row_range = list(range(row))
-            row_range.reverse()
-            for r in row_range:
-                for col in range(6):
-                    if col == 1:
-                        align = QtCore.Qt.AlignLeft|QtCore.Qt.AlignVCenter
-                    else:
-                        align = QtCore.Qt.AlignRight|QtCore.Qt.AlignVCenter
-                    text = self.item(r, col).text()
-                    item = QtWidgets.QTableWidgetItem(str(text))
-                    item.setTextAlignment(align)
-                    self.setItem(r + 1, col, item)
-            for i, col in enumerate(arr):
-                if i == 1:
-                    align = QtCore.Qt.AlignLeft|QtCore.Qt.AlignVCenter
-                else:
-                    align = QtCore.Qt.AlignRight|QtCore.Qt.AlignVCenter
-                item = QtWidgets.QTableWidgetItem(str(col))
-                item.setTextAlignment(align)
-                self.setItem(0, i, item)
-            parent.setOutput()
-        else:
-            msg = QtWidgets.QMessageBox()
-            msg.setIcon(QtWidgets.QMessageBox.Information)
-            msg.setWindowTitle("Barcode not found")
-            msg.setText("No product is registered with this barcode")
-            msg.exec_()
-            del msg
-
-    def removeItem(self, parent):
-        if self.rowCount() > 0:
-            if self.currentRow() < 0:
-                msg = QtWidgets.QMessageBox()
-                msg.setIcon(QtWidgets.QMessageBox.Information)
-                msg.setWindowTitle("No item selected")
-                msg.setText("Please select an item.")
-                msg.exec_()
-                del msg
-            else:
-                buttonReply = QtWidgets.QMessageBox.question(MainWindow, 'Confirm Void', "Void this product from list?", QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No)
-                if buttonReply == QtWidgets.QMessageBox.Yes:
-                    row = self.currentRow()
-                    self.removeRow(row)
-                    self.clearFocus()
-                    parent.barcodeArea.setFocus()
-                del buttonReply
-        else:
-            msg = QtWidgets.QMessageBox()
-            msg.setIcon(QtWidgets.QMessageBox.Warning)
-            msg.setWindowTitle("No more items")
-            msg.setText("Can't remove from an empty table.")
-            msg.exec_()
-            del msg
-       
-
 class Ui_MainWindow(object):
 
     #start of the MainWindow button functions
+    def showReturnProduct(self):
+        ReturnProductDialog.show()
+    
+    def createReceipt(self, items):
+        with open("receipt.txt", "w", encoding = "utf8") as f:
+            title = "CE Philippines"
+            address = "M.r. Lat St & President Jose P. Laurel Hwy"
+            address2 = "Batangas City, Philippines"
+            r_title = (65 - len(title)) // 2
+            r_address = (65 - len(address)) // 2
+            r_address2 = (65 - len(address2)) // 2
+            title = f"{' ' * r_title}{title}{' ' * (65 - r_title - len(title))}"
+            address = f"{' ' * r_address}{address}{' ' * (65 - r_address - len(address))}"
+            address2 = f"{' ' * r_address2}{address2}{' ' * (65 - r_address2 - len(address2))}"
+            f.write(title + "\n")
+            f.write(address + "\n")
+            f.write(address2 + "\n\n")
+            cashier = "Jason Villa"
+            transaction_id = 152
+            transaction_id = str(transaction_id).rjust(10, "0")
+            f.write(f"Transaction #: {transaction_id}".ljust(30, " ") )
+            f.write(f"Cashier: {cashier}\n".rjust(35, " ") )
+            f.write("-" * 65 + "\n")
+            f.write("Qty Product Price Total\n")
+            
+            for item in items:
+                name, price, quantity, discount = item
+                total = price * quantity
+                quantity = str(quantity).rjust(3, " ") #3
+                price = "@ ₱{:,.2f}".format(price)
+                price = price.rjust(11, " ") #10
+                if len(name) > 37:
+                    name = f"{name[:22]}...{name[-9:]}"
+                name = name.ljust(37)
+                total = "₱{:,.2f}".format(total)
+                total = total.rjust(11, " ")
+                all_lines = f"{quantity} {name} {price} {total}"
+                f.write(all_lines + "\n")
+            lines = "-"*65
+            f.write(lines + "\n")
+            total_amount = sum([x[1] * x[2] for x in items])
+            discount = sum([x[-1] * x[2] for x in items])
+            total_amount = total_amount - discount
+            vattable = total_amount / 1.12
+            vattable_label = "    VATTABLE"
+            vattable_amount = "₱{:,.2f}".format(vattable)
+            vattable_amount = vattable_amount.rjust(65 - len(vattable_label), " ")
+            f.write(f"{vattable_label}{vattable_amount}\n")
+
+            vat = total_amount - (total_amount / 1.12)
+            vat_label = "    E-VAT (12%)"
+            vat_amount = "₱{:,.2f}".format(vat)
+            vat_amount = vat_amount.rjust(65 - len(vat_label), " ")
+            f.write(f"{vat_label}{vat_amount}\n")
+
+            discount_label = "    TOTAL DISCOUNT"
+            discount_amount = "₱{:,.2f}".format(discount)
+            discount_amount = discount_amount.rjust(65 - len(discount_label), " ")
+            f.write(f"{discount_label}{discount_amount}\n\n")
+
+            total_label  = "    TOTAL"
+            total_amount_str = "₱{:,.2f}".format(total_amount)
+            total_amount_str = total_amount_str.rjust(56, " ")
+            f.write(f"{total_label}{total_amount_str}\n")
+
+            payment_label = "    PAYMENT"
+            payment_amount = float(self.paymentArea.text())
+            payment_amount_str = "₱{:,.2f}".format(payment_amount)
+            payment_amount_str = payment_amount_str.rjust(65 - len(payment_label), " ")
+            f.write(f"{payment_label}{payment_amount_str}\n")
+
+            change_line = "-" * 65
+            f.write(change_line + "\n")
+            change = payment_amount - total_amount
+            change_label = "    CHANGE"
+            change_str = "₱{:,.2f}".format(change)
+            change_str = change_str.rjust(65 - len(change_label), " ")
+            f.write(f"{change_label}{change_str}")
+
+    def setDiscount(self, *arg):
+        ind = self.productTable.currentRow()
+        if ind < 0:
+            msg = QtWidgets.QMessageBox()
+            msg.setIcon(QtWidgets.QMessageBox.Warning)
+            msg.setWindowTitle("No item selected")
+            msg.setText("Please select an item")
+            msg.exec_()
+            del msg
+        else:
+            DiscountWindowDialog.show()
     def setOutput(self, *arg):
         subTotals = []
+        discounts = []
         for i in range(self.productTable.rowCount()):
-            subTotal = self.productTable.item(i, 5).text()
-            subTotals.append(float(subTotal.replace(",", "")))
-        total = sum(subTotals)
+            price = self.productTable.item(i, 2).text()
+            qty = self.productTable.item(i, 3).text()
+            subTotal = float(price) * int(qty)
+            subTotals.append(subTotal)
+        for i in range(self.productTable.rowCount()):
+            discount = self.productTable.item(i, 4).text()
+            qty = self.productTable.item(i, 3).text()
+            all_discounts = float(discount.replace(",", "")) * int(qty)
+            discounts.append(float(all_discounts))
+        discount_amount = sum(discounts)
+        total = sum(subTotals) - discount_amount
         vattable = total / 1.12
         rounded_vattable = round(vattable, 2)
         vat = total - vattable
@@ -223,6 +155,7 @@ class Ui_MainWindow(object):
         self.totalOutput.setText("{:,.2f}".format(total))
         self.vattableOutput.setText("{:,.2f}".format(vattable))
         self.vatOutput.setText("{:,.2f}".format(vat))
+        self.discountOutput.setText("{:,.2f}".format(discount_amount))
 
     def setPayment(self, *arg):
         val = self.paymentArea.text()
@@ -246,11 +179,22 @@ class Ui_MainWindow(object):
             row = self.productTable.currentRow()
             self.productTable.setCurrentCell(row + 1, 1)
             self.capturedKeys.clear()
+        
         if QtCore.Qt.Key_F1 == eve.key():
             self.paymentArea.setFocus()
             self.capturedKeys.clear()
+
+        if QtCore.Qt.Key_F2 == eve.key():
+            self.setDiscount()
+            self.capturedKeys.clear()
+        
+
         if QtCore.Qt.Key_F5 == eve.key():
             self.searchProduct()
+            self.capturedKeys.clear()
+        
+        if QtCore.Qt.Key_F4 == eve.key():
+            self.printReceipt()
             self.capturedKeys.clear()
 
         if QtCore.Qt.Key_F6 == eve.key():
@@ -260,15 +204,24 @@ class Ui_MainWindow(object):
             self.holdSearch()
 
         if QtCore.Qt.Key_F8 == eve.key():
-            self.productTable.holdSale(parent = self)
+            self.productTable.holdSale(MainWindow = MainWindow, parent = self, cashier_id = LoginForm_ui.id)
             self.capturedKeys.clear()
 
         if QtCore.Qt.Key_F9 == eve.key():
-            self.productTable.removeItem(self)
+            self.productTable.removeItem(MainWindow = MainWindow, parent = self)
+            self.setOutput()
             self.capturedKeys.clear()
         
-        if QtCore.Qt.Key_F4 == eve.key():
-            self.printReceipt()
+        if QtCore.Qt.Key_F10 == eve.key():
+            self.voidSale()
+            self.setOutput()
+            self.capturedKeys.clear()
+        
+        if QtCore.Qt.Key_F11 == eve.key():
+            self.showReturnProduct()
+
+        if QtCore.Qt.Key_F12 == eve.key():
+            PriceChangeWindowDialog.show()
             self.capturedKeys.clear()
 
         if QtCore.Qt.Key_Return in self.capturedKeys and focused == "paymentArea":
@@ -306,6 +259,7 @@ class Ui_MainWindow(object):
         InquireWindowDialog.show()
     
     def searchProduct(self, *arg):
+        SearchWindow_ui.searchProduct()
         SearchWindowDialog.show()
 
     def releaseKeyPress(self, eve):
@@ -315,7 +269,9 @@ class Ui_MainWindow(object):
             pass
 
     def holdSearch(self):
+        self.HoldSearchWindow_ui.populateTable()
         HoldSearchDialog.show()
+        
 
     def printReceipt(self, *arg):
         change = self.changeOuput.text()
@@ -329,7 +285,7 @@ class Ui_MainWindow(object):
         else:
             if change >= 0:
                 self.capturedKeys.clear()
-                c.execute("INSERT INTO transaction (cashier_id) VALUES (1)")
+                c.execute("INSERT INTO transaction (cashier_id) VALUES (%s)", (LoginForm_ui.id, ))
                 transaction_id = c.lastrowid
                 rows = self.productTable.rowCount()
                 for r in range(rows):
@@ -340,7 +296,11 @@ class Ui_MainWindow(object):
                     discount = self.productTable.item(r, 4).text()
                     c.execute("SELECT id FROM product WHERE barcode = %s", (barcode, ))
                     product_id = c.fetchone()[0]
-                    c.execute("INSERT INTO sale (transaction_id, product_id, price, quantity) VALUES (%s, %s, %s, %s)", (transaction_id, product_id, price, qty))
+                    c.execute("INSERT INTO sale (transaction_id, product_id, price, discount, quantity) VALUES (%s, %s, %s, %s, %s)", (transaction_id, product_id, price, discount, qty,))
+                    c.execute("SELECT stock FROM product WHERE id = %s", (product_id, ))
+                    current_stock = int(c.fetchone()[0])
+                    new_stock = current_stock - int(qty)
+                    c.execute("UPDATE product SET stock = %s WHERE id = %s", (new_stock, product_id, ))
                 msg = QtWidgets.QMessageBox()
                 msg.setIcon(QtWidgets.QMessageBox.Information)
                 msg.setWindowTitle("Printing Receipt")
@@ -348,10 +308,13 @@ class Ui_MainWindow(object):
                 msg.exec_()
                 self.productTable.setRowCount(0)
                 self.paymentArea.setEnabled(False)
-                self.barcodeArea.setFocus()
-                # self.paymentArea.setText("0")
-                
+                self.barcodeArea.setFocus()                
                 del msg
+                conn.commit()
+                c.execute("SELECT (select name from product where id = product_id), price, quantity, discount from sale WHERE transaction_id = %s", (transaction_id, ))
+                items = c.fetchall()
+                self.createReceipt(items)
+                os.system("notepad /p receipt.txt")
 
             else:
                 msg = QtWidgets.QMessageBox()
@@ -389,19 +352,23 @@ class Ui_MainWindow(object):
 
     #end of the MainWindow button functions
 
-    def setupUi(self, MainWindow):
+    def setupUi(self, MainWindow, HoldSearchWindow_ui):
+        self.c = c
+        self.conn = conn
         self.capturedKeys = set()
         iconSize = (75, 75)
         MainWindow.setObjectName("MainWindow")
         MainWindow.setFixedSize(1280, 640)
         MainWindow.keyPressEvent = self.captureKeyPress
         MainWindow.keyReleaseEvent = self.releaseKeyPress
+        self.HoldSearchWindow_ui = HoldSearchWindow_ui
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
         sizePolicy.setHeightForWidth(MainWindow.sizePolicy().hasHeightForWidth())
         MainWindow.setSizePolicy(sizePolicy)
         self.centralwidget = QtWidgets.QWidget(MainWindow)
+        self.centralwidget.setStyleSheet("#centralwidget {background-image: url('Assets/MainWindow.png')}")
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
@@ -410,7 +377,7 @@ class Ui_MainWindow(object):
         self.centralwidget.setObjectName("centralwidget")
         self.productTable = CustomWidgets.CustomTableWidget(self.centralwidget)
         self.productTable.setGeometry(QtCore.QRect(10, 150, 980, 449))
-        self.productTable.keyPressEvent = lambda x: self.productTable.keyCapture(x, self)
+        self.productTable.keyPressEvent = lambda x: self.productTable.keyCapture(x, self, MainWindow, InquireWindowDialog)
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
@@ -432,6 +399,7 @@ class Ui_MainWindow(object):
         self.productTable.setSelectionMode(QtWidgets.QTableView.SingleSelection)
         self.productTable.setEditTriggers(QtWidgets.QTableWidget.NoEditTriggers)
         self.productTable.setHorizontalHeaderLabels(['Barcode', 'Description', 'Price', 'Qty', 'Discount',  'Sub-Total'])
+        self.productTable.keyPressEvent = lambda x: self.productTable.bindKeys(x, parent = self)
         header = self.productTable.horizontalHeader()
         
         header.setSectionResizeMode(0, QtWidgets.QHeaderView.Fixed)
@@ -459,7 +427,6 @@ class Ui_MainWindow(object):
         font = QtGui.QFont()
         font.setPointSize(12)
         self.vattableOutput.setFont(font)
-        self.vattableOutput.setStyleSheet("margin-right: 5px;")
         self.vattableOutput.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
         self.vattableOutput.setObjectName("vattableOutput")
         self.verticalLayout_2.addWidget(self.vattableOutput)
@@ -467,7 +434,6 @@ class Ui_MainWindow(object):
         font = QtGui.QFont()
         font.setPointSize(12)
         self.vatOutput.setFont(font)
-        self.vatOutput.setStyleSheet("margin-right: 5px;")
         self.vatOutput.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
         self.vatOutput.setObjectName("vatOutput")
         self.verticalLayout_2.addWidget(self.vatOutput)
@@ -475,7 +441,6 @@ class Ui_MainWindow(object):
         font = QtGui.QFont()
         font.setPointSize(12)
         self.discountOutput.setFont(font)
-        self.discountOutput.setStyleSheet("margin-right: 5px;")
         self.discountOutput.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
         self.discountOutput.setObjectName("discountOutput")
         self.verticalLayout_2.addWidget(self.discountOutput)
@@ -483,7 +448,6 @@ class Ui_MainWindow(object):
         font = QtGui.QFont()
         font.setPointSize(12)
         self.totalOutput.setFont(font)
-        self.totalOutput.setStyleSheet("margin-right: 5px;")
         self.totalOutput.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
         self.totalOutput.setObjectName("totalOutput")
         self.verticalLayout_2.addWidget(self.totalOutput)
@@ -507,7 +471,6 @@ class Ui_MainWindow(object):
         font = QtGui.QFont()
         font.setPointSize(12)
         self.changeOuput.setFont(font)
-        self.changeOuput.setStyleSheet("margin-right: 5px;")
         self.changeOuput.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
         self.changeOuput.setObjectName("changeOuput")
         self.verticalLayout_2.addWidget(self.changeOuput)
@@ -589,8 +552,10 @@ class Ui_MainWindow(object):
         self.splitter.setObjectName("splitter")
         self.tender_button = CustomWidgets.HoverLabel(self.splitter, "QtIcons/Tender_Cash.png", iconSize, "tender_button")
         self.discount_button = CustomWidgets.HoverLabel(self.splitter, "QtIcons/Discount.png", iconSize, "discount_button")
+        self.discount_button.mousePressEvent = lambda x: self.setDiscount()
         self.taxExcempt_button = CustomWidgets.HoverLabel(self.splitter, "QtIcons/Tax_Excempt.png", iconSize, "taxExcempt_button")
         self.print_button = CustomWidgets.HoverLabel(self.splitter, "QtIcons/Print_Receipt.png", iconSize, "print_button")
+        self.print_button.mousePressEvent = lambda x: self.printReceipt()
         self.search_button = CustomWidgets.HoverLabel(self.splitter, "QtIcons/Search.png", iconSize, "search_button")
         self.search_button.mousePressEvent = self.searchProduct
         self.inquire_button = CustomWidgets.HoverLabel(self.splitter, "QtIcons/Inquire.png", iconSize, 'inquire_button')
@@ -598,28 +563,22 @@ class Ui_MainWindow(object):
         self.search_hold_button = CustomWidgets.HoverLabel(self.splitter, "QtIcons/Search_Hold.png", iconSize, "search_hold_button")
         self.search_hold_button.mousePressEvent = lambda x: self.holdSearch()
         self.hold_button = CustomWidgets.HoverLabel(self.splitter, "QtIcons/Hold_Sale.png", iconSize, "hold_button")
-        self.hold_button.mousePressEvent = lambda x: self.productTable.holdSale(parent = self)
+        self.hold_button.mousePressEvent = lambda x: self.productTable.holdSale(MainWindow = MainWindow, parent = self, cashier_id = LoginForm_ui.id)
         self.remove_button = CustomWidgets.HoverLabel(self.splitter, "QtIcons/Remove_Item.png", iconSize, "remove_button")
-        self.remove_button.mousePressEvent = lambda x: self.productTable.removeItem(self)
+        self.remove_button.mousePressEvent = lambda x: self.productTable.removeItem(MainWindow = MainWindow, parent = self)
         self.void_button = CustomWidgets.HoverLabel(self.splitter, "QtIcons/Void_Transaction.png", iconSize, "void_button")
         self.void_button.mousePressEvent = lambda x: self.voidSale()
         self.returnProduct_button = CustomWidgets.HoverLabel(self.splitter, "QtIcons/Return_Product.png", iconSize, "returnProduct_button")
+        self.returnProduct_button.mousePressEvent = lambda x: self.showReturnProduct()
         self.change_button = CustomWidgets.HoverLabel(self.splitter, "QtIcons/Change_Price.png", iconSize, "change_button")
+        self.change_button.mousePressEvent = lambda x: PriceChangeWindowDialog.show()
         self.add_button = CustomWidgets.HoverLabel(self.splitter, "QtIcons/Increase_Qty.png", iconSize, "add_button")
         self.add_button.mousePressEvent = lambda x: self.productTable.addQty(parent = self)
         self.sub_button = CustomWidgets.HoverLabel(self.splitter, "QtIcons/Decrease_Qty.png", iconSize, "sub_button")
         self.sub_button.mousePressEvent = lambda x: self.productTable.subQty(parent = self)
         self.logout_button = CustomWidgets.HoverLabel(self.splitter, "QtIcons/Logout.png", iconSize, "logout_button")
+        self.logout_button.mousePressEvent = lambda x: sys.exit()
         MainWindow.setCentralWidget(self.centralwidget)
-        self.menubar = QtWidgets.QMenuBar(MainWindow)
-        self.menubar.setGeometry(QtCore.QRect(0, 0, 1280, 21))
-        self.menubar.setStyleSheet("background-color: #f4f4f4;")
-        self.menubar.setObjectName("menubar")
-        self.menuFile = QtWidgets.QMenu(self.menubar)
-        self.menuFile.setObjectName("menuFile")
-        self.menuViews = QtWidgets.QMenu(self.menubar)
-        self.menuViews.setObjectName("menuViews")
-        MainWindow.setMenuBar(self.menubar)
         self.statusbar = QtWidgets.QStatusBar(MainWindow)
         self.statusbar.setObjectName("statusbar")
         MainWindow.setStatusBar(self.statusbar)
@@ -629,11 +588,6 @@ class Ui_MainWindow(object):
         self.actionTransaction.setObjectName("actionTransaction")
         self.actionExit_F4 = QtWidgets.QAction(MainWindow)
         self.actionExit_F4.setObjectName("actionExit_F4")
-        self.menuFile.addAction(self.actionExit_F4)
-        self.menuViews.addAction(self.actionReports)
-        self.menuViews.addAction(self.actionTransaction)
-        self.menubar.addAction(self.menuFile.menuAction())
-        self.menubar.addAction(self.menuViews.menuAction())
 
         self.retranslateUi(MainWindow)
         QtCore.QMetaObject.connectSlotsByName(MainWindow)
@@ -644,7 +598,6 @@ class Ui_MainWindow(object):
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
         MainWindow.setWindowTitle(_translate("MainWindow", "MainWindow"))
-        self.label.setText(_translate("MainWindow", "POS System - Cashier - Branch"))
         self.vattableOutput.setText(_translate("MainWindow", "0.00"))
         self.vatOutput.setText(_translate("MainWindow", "0.00"))
         self.discountOutput.setText(_translate("MainWindow", "0.00"))
@@ -659,8 +612,6 @@ class Ui_MainWindow(object):
         self.changeLabel.setText(_translate("MainWindow", "Change:"))
         self.barcodeArea.setPlaceholderText(_translate("MainWindow", "Qty*Barcode"))
         self.messageBox.setText(_translate("MainWindow", "Message Box Here"))
-        self.menuFile.setTitle(_translate("MainWindow", "File"))
-        self.menuViews.setTitle(_translate("MainWindow", "View"))
         self.actionReports.setText(_translate("MainWindow", "Reports"))
         self.actionTransaction.setText(_translate("MainWindow", "Transactions"))
         self.actionExit_F4.setText(_translate("MainWindow", "Exit (F4)"))
@@ -669,20 +620,68 @@ class Ui_MainWindow(object):
 if __name__ == "__main__":
     import sys
     app = QtWidgets.QApplication(sys.argv)
-    MainWindow = QtWidgets.QMainWindow()
-    MainWindow_ui = Ui_MainWindow()
-    MainWindow_ui.setupUi(MainWindow)
-    MainWindow.show()
-    InquireWindowDialog = QtWidgets.QDialog()
-    InquireWindowDialog.setWindowModality(QtCore.Qt.ApplicationModal)
-    InquireWindow_ui = InquireWindow.Ui_Dialog()
-    InquireWindow_ui.setupUi(InquireWindowDialog, c)
-    SearchWindowDialog = QtWidgets.QWidget()
-    SearchWindowDialog.setWindowModality(QtCore.Qt.ApplicationModal)
-    SearchWindow_ui = SearchWindow.Ui_Form()
-    SearchWindow_ui.setupUi(SearchWindowDialog, c, MainWindow_ui)
-    HoldSearchDialog = QtWidgets.QWidget()
-    HoldSearchDialog.setWindowModality(QtCore.Qt.ApplicationModal)
-    HoldSearchWindow_ui = HoldSearchWindow.Ui_Dialog()
-    HoldSearchWindow_ui.setupUi(HoldSearchDialog, c, MainWindow_ui)
+
+    import SearchWindow, HoldSearchWindow, CustomWidgets, InquireWindow, DiscountWindow, json , PriceChangeWindow, datetime, LoginForm, DatabaseCreate, AccountSetup, ReturnProduct
+    if datetime.datetime.now() >= datetime.datetime(month = 6, day = 3, year = 2024):
+        msg = QtWidgets.QMessageBox()
+        msg.setIcon(QtWidgets.QMessageBox.Warning)
+        msg.setWindowTitle("Trial Expired")
+        msg.setText("Please contact developer")
+        msg.exec_()
+        del msg
+        sys.exit()
+    else:
+        load_dotenv()
+        conn = DatabaseCreate.setupConnection()
+        if not conn:
+            msg = QtWidgets.QMessageBox()
+            msg.setIcon(QtWidgets.QMessageBox.Critical)
+            msg.setWindowTitle("Connection Error")
+            msg.setText("Please start your localhost")
+            msg.exec_()
+            del msg
+            sys.exit()
+
+        c = conn.cursor()
+        c.execute("SELECT * from user where is_admin = True")
+        result = c.fetchone()
+        if not result:
+            AccountSetupWidget = QtWidgets.QWidget()
+            AccountSetup_ui = AccountSetup.Ui_Form()
+            AccountSetup_ui.setupUi(AccountSetupWidget, conn)
+            AccountSetupWidget.show()
+        else:
+            MainWindow = QtWidgets.QMainWindow()
+            MainWindow_ui = Ui_MainWindow()
+            InquireWindowDialog = QtWidgets.QDialog()
+            InquireWindowDialog.setWindowModality(QtCore.Qt.ApplicationModal)
+            InquireWindow_ui = InquireWindow.Ui_Dialog()
+            InquireWindow_ui.setupUi(InquireWindowDialog, c)
+            SearchWindowDialog = QtWidgets.QWidget()
+            SearchWindowDialog.setWindowModality(QtCore.Qt.ApplicationModal)
+            SearchWindow_ui = SearchWindow.Ui_Form()
+            SearchWindow_ui.setupUi(SearchWindowDialog, c, MainWindow_ui)
+            HoldSearchDialog = QtWidgets.QWidget()
+            HoldSearchDialog.setWindowModality(QtCore.Qt.ApplicationModal)
+            HoldSearchWindow_ui = HoldSearchWindow.Ui_Dialog()
+            HoldSearchWindow_ui.setupUi(HoldSearchDialog, c, MainWindow_ui)
+            DiscountWindowDialog = QtWidgets.QWidget()
+            DiscountWindowDialog.setWindowModality(QtCore.Qt.ApplicationModal)
+            DiscountWindow_ui = DiscountWindow.Ui_Dialog()
+            DiscountWindow_ui.setupUi(DiscountWindowDialog, c = c, parent = MainWindow_ui)
+            MainWindow_ui.setupUi(MainWindow, HoldSearchWindow_ui)
+            LoginFormDialog = QtWidgets.QWidget()
+            LoginFormDialog.setWindowModality(QtCore.Qt.ApplicationModal)
+            LoginForm_ui = LoginForm.Ui_Form()
+            LoginForm_ui.setupUi(LoginFormDialog, MainWindow, MainWindow_ui)
+            LoginFormDialog.show()
+            PriceChangeWindowDialog = QtWidgets.QWidget()
+            PriceChangeWindowDialog.setWindowModality(QtCore.Qt.ApplicationModal)
+            PriceChangeWindow_ui = PriceChangeWindow.Ui_Dialog()
+            PriceChangeWindow_ui.setupUi(PriceChangeWindowDialog, c = c, parent = MainWindow_ui)
+            ReturnProductDialog = QtWidgets.QWidget()
+            ReturnProductDialog.setWindowModality(QtCore.Qt.ApplicationModal)
+            ReturnProduct_ui = ReturnProduct.Ui_Form()
+            ReturnProduct_ui.setupUi(ReturnProductDialog, MainWindow_ui)
+
     sys.exit(app.exec_())

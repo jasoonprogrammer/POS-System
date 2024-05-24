@@ -1,8 +1,4 @@
 from PyQt5 import QtCore, QtGui, QtWidgets
-import mysql.connector
-conn = mysql.connector.connect(host = "localhost", user = "root", password = "", database = "test")
-
-c = conn.cursor()
 
 
 def isFloat(value) -> bool:
@@ -53,24 +49,70 @@ class HoverLabel(QtWidgets.QLabel):
             self.mount.addWidget(self)
 
 class CustomTableWidget(QtWidgets.QTableWidget):
+    def setSubtotal(self):
+        row, _, price = self.grabCurrent(column = 2)
+        _, _, qty = self.grabCurrent(column = 3)
+        _, _, discount = self.grabCurrent(column = 4)
+        total = float(price) * int(qty) - float(discount)
+        self.modifyCell(row, 5, "{:,.2f}".format(total), alignment = "right")
+
+    def priceChange(self, newPrice, **kwargs):
+        parent = kwargs['parent']
+        row, col, val = self.grabCurrent(column = 2)
+        self.modifyCell(row, 4, col, newPrice, alignment = "right")
+    
+    def grabCurrent(self, column = 0):
+        row = self.currentRow()
+        col = column
+        value = self.item(row, col).text()
+        return (row, col, value)
+        
+
+    def modifyCell(self, row, index, value, alignment = "left"):
+        item = QtWidgets.QTableWidgetItem(str(value))
+        if alignment.lower() == "right":
+            align = QtCore.Qt.AlignRight|QtCore.Qt.AlignVCenter
+        elif alignment.lower() == "left":
+            align = QtCore.Qt.AlignLeft|QtCore.Qt.AlignVCenter
+        elif alignment.lower() == "center":
+            align = QtCore.Qt.AlignHCenter|QtCore.Qt.AlignVCenter
+        else:
+            raise ValueError(f"{alignment} is not a valid alignment")
+        item.setTextAlignment(align)
+        self.setItem(row, index, item)
+        
+
+    def bindKeys(self, eve, **kwargs):
+        parent = kwargs['parent']
+        print(eve.key())
+        if eve.key() == QtCore.Qt.Key_F2:
+            parent.setDiscount()
+        if eve.key() == 43:
+            self.addQty(parent = parent)
+        if eve.key() == 45:
+            self.subQty(parent = parent)
+        if eve.key() == 16777264:
+            parent.paymentArea.setFocus()
 
     def holdSale(self, **kwargs):
+        MainWindow = kwargs['MainWindow']
         parent = kwargs['parent']
+        cashier_id = kwargs['cashier_id']
         rows = self.rowCount()
         if rows > 0:
-            buttonReply = QtWidgets.QMessageBox.question(parent, 'Hold this sale?', "Are you sure you want to hold this sale?", QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No)
+            buttonReply = QtWidgets.QMessageBox.question(MainWindow, 'Confirm Void', "Void this product from list?", QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No)
             if buttonReply == QtWidgets.QMessageBox.Yes:
-                c.execute("INSERT INTO hold (cashier_id) VALUES (1)")
-                hold_id = c.lastrowid
+                parent.c.execute("INSERT INTO hold (cashier_id) VALUES (%s)", (cashier_id, ))
+                parent.conn.commit()
+                hold_id = parent.c.lastrowid
                 for row in range(rows):
                     anon = lambda x: self.item(row, x).text()
                     arr = {"barcode": anon(0), "price": anon(2), "qty": anon(3), "discount": anon(4)}
-                    c.execute("SELECT id FROM product WHERE barcode = %s", (anon(0),))
-                    product_id = c.fetchone()[0]
-                    c.execute("INSERT INTO hold_product (hold_id, product_id, price, quantity) VALUES (%s, %s, %s, %s)",
+                    parent.c.execute("SELECT id FROM product WHERE barcode = %s", (anon(0),))
+                    product_id = parent.c.fetchone()[0]
+                    parent.c.execute("INSERT INTO hold_product (hold_id, product_id, price, quantity) VALUES (%s, %s, %s, %s)",
                             (hold_id, product_id, anon(2), anon(3),))
-                    print(arr)
-                conn.commit()
+                    parent.conn.commit()
                 self.setRowCount(0)
                 parent.paymentArea.setText("")
                 parent.setOutput()
@@ -154,8 +196,8 @@ class CustomTableWidget(QtWidgets.QTableWidget):
         if parent.paymentArea.isEnabled() == False:
             parent.paymentArea.setEnabled(True)
             parent.paymentArea.setText("")
-        c.execute("SELECT name, price FROM product WHERE barcode = %s", (barcode,))
-        result = c.fetchone()
+        parent.c.execute("SELECT name, price FROM product WHERE barcode = %s", (barcode,))
+        result = parent.c.fetchone()
         if result:
             row = self.rowCount()
             self.setRowCount(row + 1)
@@ -190,7 +232,8 @@ class CustomTableWidget(QtWidgets.QTableWidget):
             msg.exec_()
             del msg
 
-    def removeItem(self, parent):
+    def removeItem(self, **kwargs):
+        MainWindow = kwargs['MainWindow']
         if self.rowCount() > 0:
             if self.currentRow() < 0:
                 msg = QtWidgets.QMessageBox()
@@ -200,12 +243,12 @@ class CustomTableWidget(QtWidgets.QTableWidget):
                 msg.exec_()
                 del msg
             else:
-                buttonReply = QtWidgets.QMessageBox.question(parent, 'Confirm Void', "Void this product from list?", QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No)
+                buttonReply = QtWidgets.QMessageBox.question(MainWindow, 'Confirm Void', "Void this product from list?", QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No)
                 if buttonReply == QtWidgets.QMessageBox.Yes:
                     row = self.currentRow()
                     self.removeRow(row)
                     self.clearFocus()
-                    parent.barcodeArea.setFocus()
+                    kwargs['parent'].barcodeArea.setFocus()
                 del buttonReply
         else:
             msg = QtWidgets.QMessageBox()
